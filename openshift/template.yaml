@@ -1,0 +1,71 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: prow-jobs-scraper
+objects:
+- apiVersion: batch/v1
+  kind: CronJob
+  metadata:
+    name: prow-jobs-scraper
+  spec:
+    schedule: "@hourly"
+    jobTemplate:
+      spec:
+        restartPolicy: OnFailure
+        backoffLimit: 3
+        ttlSecondsAfterFinished: 10800 # keep last 3 runs (3 * 1h)
+        template:
+          spec:
+            serviceAccountName: assisted-service
+            containers:
+            - name: prow-jobs-scraper
+              image: ${IMAGE_NAME}:${IMAGE_TAG}
+              imagePullPolicy: ${IMAGE_PULL_POLICY}
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 2000Mi
+                requests:
+                  cpu: 300m
+                  memory: 400Mi
+              env:
+              - name: LOG_LEVEL
+                value: "${LOG_LEVEL}"
+              - name: ES_URL
+                valueFrom:
+                  secretKeyRef:
+                    key: endpoint
+                    name: assisted-installer-elasticsearch
+              - name: ES_INDEX
+                value: "${ES_INDEX}"
+              - name: ES_STEP_INDEX
+                value: "${ES_STEP_INDEX}"
+              - name: ES_JOB_INDEX
+                value: "${ES_JOB_INDEX}"
+              - name: JOB_LIST_URL
+                value: "${JOB_LIST_URL}"
+              - name: ES_USER
+                valueFrom:
+                  secretKeyRef:
+                    key: master_user_name
+                    name: elastic-master-credentials
+              - name: ES_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    key: master_user_password
+                    name: elastic-master-credentials
+parameters:
+- name: IMAGE_NAME
+  value: quay.io/app-sre/prow-jobs-scraper
+- name: IMAGE_TAG
+  required: true
+- name: ES_STEP_INDEX
+  value: 'steps'
+- name: ES_JOB_INDEX
+  value: 'jobs'
+- name: JOB_LIST_URL
+  value: 'https://prow.ci.openshift.org/prowjobs.js?omit=annotations,labels,decoration_config,pod_spec'
+- name: LOG_LEVEL
+  value: 'INFO'
+- name: IMAGE_PULL_POLICY
+  value: 'Always'
